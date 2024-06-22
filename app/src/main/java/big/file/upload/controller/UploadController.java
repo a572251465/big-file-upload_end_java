@@ -11,7 +11,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.List;
+import java.util.Optional;
 
 import static java.nio.file.Files.newInputStream;
 
@@ -139,6 +139,25 @@ public class UploadController {
   }
   
   /**
+   * 获取 上传的列表
+   *
+   * @param baseDir 表示基础目录
+   * @author lihh
+   */
+  @GetMapping("/list/{baseDir}")
+  public ResponseEntity list(@PathVariable String baseDir) {
+    // 基础目录 file
+    File basePathFile = new File(tmpDir + File.separator + baseDir);
+    // 表示目录是否存在
+    if (!basePathFile.isDirectory() || !basePathFile.exists())
+      return ResponseEntity.builder().success(false).build();
+    
+    // 读取目录下的文件
+    String[] list = Optional.ofNullable(basePathFile.list()).orElse(new String[]{});
+    return ResponseEntity.builder().success(true).data(Arrays.asList(list)).build();
+  }
+  
+  /**
    * 切片文件 合并中
    *
    * @param baseDir  基础目录
@@ -171,6 +190,12 @@ public class UploadController {
     String mergePublicDir = publicDir + File.separator + fileName;
     // 判断是否合并成功
     boolean mergeFlag = mergeFileHandler(files, mergePublicDir);
+    
+    // 如果 merge成功后 删除临时文件
+    if (mergeFlag)
+      // 删除目录
+      baseDirFile.delete();
+    
     return ResponseEntity.builder().success(mergeFlag).build();
   }
 }
