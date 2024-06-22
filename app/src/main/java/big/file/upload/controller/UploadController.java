@@ -192,9 +192,14 @@ public class UploadController {
     boolean mergeFlag = mergeFileHandler(files, mergePublicDir);
     
     // 如果 merge成功后 删除临时文件
-    if (mergeFlag)
-      // 删除目录
-      baseDirFile.delete();
+    if (mergeFlag) {
+      // 先删除文件
+      for (File file : files)
+        if (file.isFile()) file.delete();
+      
+      // 删除目录本身
+      Files.deleteIfExists(Paths.get(baseDir));
+    }
     
     return ResponseEntity.builder().success(mergeFlag).build();
   }
