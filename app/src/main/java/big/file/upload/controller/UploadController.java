@@ -1,19 +1,19 @@
 package big.file.upload.controller;
 
 import big.file.upload.entity.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+
+import static java.nio.file.Files.newInputStream;
 
 @RestController
 @RequestMapping("/upload")
@@ -52,7 +52,7 @@ public class UploadController {
    * @param inputStream    输入流
    * @author lihh
    */
-  public void writeFileHandler(String outputFilePath, InputStream inputStream) {
+  private void writeFileHandler(String outputFilePath, InputStream inputStream) {
     try {
       OutputStream outputStream = Files.newOutputStream(Paths.get(outputFilePath));
       
@@ -67,6 +67,40 @@ public class UploadController {
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
+  }
+  
+  /**
+   * 合并多个文件
+   *
+   * @param files          文件数组
+   * @param outputFilePath 合并文件路径
+   * @author lihh
+   */
+  private boolean mergeFileHandler(File[] files, String outputFilePath) throws IOException {
+    // 实例化 出力文件流
+    // 使用APPEND选项打开或创建文件，并创建追加模式的输出流
+    OutputStream outputStream = Files.newOutputStream(Paths.get(outputFilePath), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    
+    // 从这里 开始遍历输入文件
+    for (File sourceFile : files) {
+      // 判断文件是否存在
+      if (!sourceFile.exists()) return false;
+      
+      // 这里是 输入流
+      InputStream inputStream = newInputStream(sourceFile.toPath());
+      
+      byte[] buffer = new byte[1024];
+      int length;
+      while ((length = inputStream.read(buffer)) > 0) {
+        outputStream.write(buffer, 0, length);
+      }
+      outputStream.flush();
+      inputStream.close();
+    }
+    
+    if (outputStream != null) outputStream.close();
+    
+    return true;
   }
   
   /**
@@ -92,13 +126,27 @@ public class UploadController {
   }
   
   /**
-   * 文件合并中
+   * 验证文件 是否存在/ 为了实现秒传
    *
-   * @param baseDir 基础目录
+   * @param fileName 文件名称
    * @author lihh
    */
-  @PostMapping("/merge/{baseDir}")
-  public ResponseEntity merge(@PathVariable("baseDir") String baseDir) {
+  @GetMapping("/verify/{fileName}")
+  public ResponseEntity verify(@PathVariable String fileName) {
+    // 表示文件
+    File file = new File(publicDir + File.separator + fileName);
+    return ResponseEntity.builder().success(file.isFile()).build();
+  }
+  
+  /**
+   * 切片文件 合并中
+   *
+   * @param baseDir  基础目录
+   * @param fileName 文件名称
+   * @author lihh
+   */
+  @GetMapping("/merge/{baseDir}/{fileName}")
+  public ResponseEntity merge(@PathVariable("baseDir") String baseDir, @PathVariable("fileName") String fileName) throws IOException {
     baseDir = tmpDir + File.separator + baseDir;
     // 临时 基础目录
     File baseDirFile = new File(baseDir);
@@ -109,12 +157,20 @@ public class UploadController {
     if (files == null || files.length == 0)
       return ResponseEntity.builder().build();
     
-    // 为了防止 这里进行强制排序
+    // 为了防止文件顺序乱了 这里进行强制排序
     Arrays.sort(files, new Comparator<File>() {
       @Override
       public int compare(File o1, File o2) {
-      
+        String[] p1Arr = o1.getName().split("-"), p2Arr = o2.getName().split("-");
+        int lastP1 = Integer.parseInt(p1Arr[1]), lastP2 = Integer.parseInt(p2Arr[1]);
+        return lastP1 - lastP2;
       }
     });
+    
+    // 表示合并后的目录
+    String mergePublicDir = publicDir + File.separator + fileName;
+    // 判断是否合并成功
+    boolean mergeFlag = mergeFileHandler(files, mergePublicDir);
+    return ResponseEntity.builder().success(mergeFlag).build();
   }
 }
